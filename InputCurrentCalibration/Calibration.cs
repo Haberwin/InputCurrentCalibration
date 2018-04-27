@@ -19,6 +19,7 @@ namespace InputCurrentCalibration
         public double InputCurrent;
         private string cmd;
         public string GPIB_Address;
+        private static string CmdPath = @"C:\Windows\System32\cmd.exe";
         Thread runCa;
         public Calibration()
         {
@@ -35,6 +36,7 @@ namespace InputCurrentCalibration
 
         private void ButtonStart_Click(object sender, EventArgs e)
         {
+
             if(buttonStart.Text == "Start")
             { 
                 LOG.Clear();
@@ -54,7 +56,7 @@ namespace InputCurrentCalibration
                 buttonStart.Text = "Start";
                 buttonStart.Update();
                 runCa.Abort();
-                OandClosePort(0);
+                Config("limit.bat","",0);
             }
             
             return;
@@ -62,23 +64,29 @@ namespace InputCurrentCalibration
         public void Runcal()
         {
             Output("Start...");
+            if (!GetVi())
+            {
+                return;
+            }
+            checkdevice(out bool Isconnect);
+            if(!Isconnect)
+            { return; }
             try
             {
-                if (OandClosePort(1))
+                if (Config("limit.bat","",1))
                 {
                     Thread.Sleep(5000);
-                    try { CalibCurrent(); } catch { }
-                    if (!OandClosePort(0))
+                    CalibCurrent();
+                    if (!Config("limit.bat", "",0))
                     {
                         Result.Text = "Fail";
                         Result.BackColor = Color.Orange;
                     }
                 }
-            } catch
+            } catch(Exception ex)
             {
-                Output("缺少.bat文件");
+                Output(ex.ToString());
             }
-
             //Visa32.viClose(Vi);
             buttonStart.Text = "Start";
             buttonStart.Update();
@@ -108,7 +116,7 @@ namespace InputCurrentCalibration
             Visa32.viScanf(Vi, "%t", Feedback);
             Output(Feedback.ToString());
 
-            Result.Text = "电源已连接";
+            Result.Text = "校准中...";
             Result.BackColor = Color.PaleGreen;
             Result.Update();
 
@@ -117,195 +125,306 @@ namespace InputCurrentCalibration
 
         public bool CalibCurrent()
         {
-            int Data00 = 76;
-            int Gap = 0;
-            try
-            {
-                Data00 = Convert.ToInt32(Input00.Text);
-
-            }
-            catch { Output("输入的格式不正确"); }
-            do
-            {
-                if(Input("00 01 ", Data00)==0)
-                {
-                    Result.Text = "FAIL";
-                    Result.BackColor = Color.OrangeRed;
-                    Output("未能成功写入寄存器");
-                    return false;
-
-                }
-                Output00.Update();
-                //Thread.Sleep(1500);
-                Feedback.Remove(0, Feedback.Length);
-                Visa32.viPrintf(Vi, "MEAS:CURR:DC?; *WAI\n");
-                Thread.Sleep(500);
-                Visa32.viScanf(Vi, "%t", Feedback);
-                s = Feedback.ToString().Split(',');
-                InputCurrent = Convert.ToDouble(s[0]);
-                if(InputCurrent<1.039)
-                {
-                    Gap = -1;
-                }
-                else if(InputCurrent > 1.045)
-                {
-                    Gap = 1;
-                }
-                else
-                {
-                    Gap = 0;
-                    //Input("02 03 ", Data00);
-                    
-                }
-                Current.Text = InputCurrent.ToString();
-                Current.Update();
-                Output("Register00:"+Data00.ToString()+"\tRegister01:"+Data00.ToString()+"\tInput Current:"+ InputCurrent.ToString());
-                Data00 += Gap;
-                
-            } while ((InputCurrent<1.039||InputCurrent>1.045)&&(0<=Data00 && Data00<=200));
-            if(Data00 ==Input("02 03 ", Data00))
-            {
-                Output00.Update();
-                Result.Text = "PASS";
-                Result.BackColor = Color.PaleGreen;
-                Result.Update();
-                return true;
-            }
-            else
+            int Data00 = 0;
+            int Data01 = 0;
+            double resultcurrent;
+            bool Is2000=false, Is1040=false, Is800=false, Is500=false;
+            double maxcurrent = steptest(0, 0);
+            if (steptest(Data00, Data01) == 0)
             {
                 Result.Text = "FAIL";
                 Result.BackColor = Color.OrangeRed;
+                Output("寄存器操作失败。。。。。。");
                 return false;
+            }else if (maxcurrent<=1.95)
+            {
+                Result.Text = "FAIL";
+                Result.BackColor = Color.OrangeRed;
+                Output("最大电流异常，请检查电池电量！");
+                return false;
+
+            }
+            for(Data00=0;Data00<256;Data00++)
+            {
+                for (Data01 = Data00; Data01 <= Data00 + 1; Data01++)
+                {
+                    resultcurrent = steptest(Data00, Data01);
+                    Current.Text = resultcurrent.ToString();
+
+                    if(!Is2000 && resultcurrent<= 2)
+                    {
+                        if(Config("USB.bat", "config_data_ac_resistor", Data00 * 256 + Data01))
+                        {
+                            Output("WALL adapter 2A 校准成功！");
+                            config_lable(c2000, true);
+                            Is2000 = true;
+                            Data00 = Data01 = Data00 + 12;
+                        }
+                        else
+                        {
+                            Output("WALL adapter 2A 校准失败！");
+                            config_lable(c2000, false);
+                            config_lable(Result, false);
+                            Update();
+                            return false;
+                        }
+                    }
+                    if(!Is1040 && resultcurrent<=1.04)
+                    {
+                        if (setdata(Data00,Data01,rege:"02 03 "))
+                        {
+                            Output("WLC 1A  校准成功！");
+                            config_lable(c1040, true);
+                            Is1040 = true;
+                            Data00 = Data01 = Data00 + 16;
+                        }
+                        else
+                        {
+                            Output("WLC 1A 校准失败！");
+                            config_lable(c1040, false);
+                            config_lable(Result, false);
+                            Update();
+                            return false;
+                        }
+
+                    }
+                    if (!Is800 && resultcurrent <= 0.8)
+                    {
+                        if (Config("USB.bat", "config_data_wlc_5w_resistor", Data00 * 256 + Data01))
+                        {
+                            Output(" WLC 6V, 800mA  校准成功！");
+                            config_lable(c800, true);
+                            Is800 = true;
+                            Data00 = Data01=Data00+130;
+                        }
+                        else
+                        {
+                            Output(" WLC 6V, 800mA 校准失败！");
+                            config_lable(c800, false);
+                            config_lable(Result, false);
+                            Update();
+                            return false;
+                        }
+
+                    }
+                    if (!Is500 && resultcurrent <= 0.5)
+                    {
+                        if (Config("USB.bat", "config_data_usb_resistor", Data00 * 256 + Data01))
+                        {
+                            Output("USB PC 500mA  校准成功！");
+                            config_lable(c500, true);
+                            config_lable(Result, true);
+                            Is500 = true;
+                            return true;
+                        }
+                        else
+                        {
+                            Output("USB PC 500mA 校准失败！");
+                            config_lable(c500, false);
+                            config_lable(Result, false);
+                            Update();
+                            return false;
+                        }
+
+                    }
+                }
+            }
+            return false;
+        }
+        public void config_lable(Label lable,bool result)
+        {
+            if (result)
+            {
+                lable.Text = "Pass";
+                lable.BackColor = Color.PaleGreen;
+                Update();
+            }
+            else
+            {
+                lable.Text = "Fail";
+                lable.BackColor = Color.OrangeRed;
+                Update();
             }
 
+
         }
-        public int Input(string str,int Register1)
+
+        public double steptest(int Data00,int Data01)
+        {
+            if (!setdata(Data00,Data01))
+            {
+                Result.Text = "FAIL";
+                Result.BackColor = Color.OrangeRed;
+                Output("未能成功写入寄存器");
+                return 0;
+            }
+            Output00.Update();
+            Feedback.Remove(0, Feedback.Length);
+            Visa32.viPrintf(Vi, "MEAS:CURR:DC?; *WAI\n");
+            Thread.Sleep(500);
+            Visa32.viScanf(Vi, "%t", Feedback);
+            s = Feedback.ToString().Split(',');
+            InputCurrent = Convert.ToDouble(s[0]);
+            return InputCurrent;
+        }
+        
+        public bool setdata(int Data00,int Data01,string rege="00 01 ")
         {
             string output, error;
-            string lastData="";
+            string command=rege+Data00.ToString()+" "+Data01.ToString();
+            bool Ischange = false;
             int i=0;
             string match = @"\r\n(\d+)";
-            Input00.Text = Register1.ToString();
-            Input00.Update();
-            
-            Process p = new Process();
-             cmd = System.AppDomain.CurrentDomain.BaseDirectory;
+            cmd = System.AppDomain.CurrentDomain.BaseDirectory;
             string path = cmd + "cmd.bat";
-            ProcessStartInfo pi = new ProcessStartInfo(path, str + Register1.ToString())
+            using (Process p = new Process())
             {
-                UseShellExecute = false,
-                RedirectStandardOutput = true,
-                RedirectStandardError = true,
-                CreateNoWindow = true
-            };//第二个参数为传入的参数，string类型以空格分隔各个参数  
-            p.StartInfo = pi;
-            p.Start();
-            output = p.StandardOutput.ReadToEnd();
-            error = p.StandardError.ReadToEnd();
-            p.WaitForExit();
-            //p.Close();
-            if (error != null && error.Length>0)
-            {
-                Output(error);
-                return 0;
-                
-            }
-            foreach (Match tempM in Regex.Matches(output, match))
-            {
-                
-                if (i == 0)
+                ProcessStartInfo pi = new ProcessStartInfo(path, command + " &exit")
                 {
-                    Output00.Text = tempM.Value.Remove(0,2);
-                    lastData = tempM.ToString();
+                    UseShellExecute = false,
+                    RedirectStandardOutput = true,
+                    RedirectStandardError = true,
+                    CreateNoWindow = true
+                };//第二个参数为传入的参数，string类型以空格分隔各个参数  
+                p.StartInfo = pi;
+                p.Start();
+                output = p.StandardOutput.ReadToEnd();
+                error = p.StandardError.ReadToEnd();
+                if (error != null && error.Length > 0)
+                {
+                    Output(error);
+                    return false;
+                }
+                foreach (Match tempM in Regex.Matches(output, match))
+                {
+                    if (i == 0)
+                    {
+                        Output00.Text = tempM.Value.Remove(0, 2);
+                        Ischange = tempM.Value.Remove(0, 2).ToString().Equals(Data00.ToString());
+                        Output(output.ToString());
+                        Update();
+                        Output("Register 00:" + tempM);
+                    }
+                    else
+                    {
+                        Output00.Text = tempM.Value.Remove(0, 2);
+                        this.Update();
+                        Output00.Update();
+                        Output("Register 01 :" + tempM);
+                        Ischange = tempM.Value.Remove(0, 2).ToString().Equals(Data01.ToString());
+
+                        if (Ischange)
+                        {
+
+                            return true;
+                        }
+                        else
+                        {
+                            Output("未能成功写入寄存器");
+                            return false;
+                        }
+                    }
+                    i++;
+                }
+                p.WaitForExit();//等待程序执行完退出进程
+                p.Close();
+                return false;
+            }    
+        }
+        public bool Config(string cmdname,string configpath,int data)
+        {
+            string output,error;
+            bool Ischange = false;
+            int i = 0;
+            string match = @"\r\n(\d+)";
+            cmd = System.AppDomain.CurrentDomain.BaseDirectory;
+            string path = cmd + cmdname;
+            using (Process p = new Process())
+            {
+                ProcessStartInfo pi = new ProcessStartInfo(path, data.ToString()+" "+ configpath  + " &exit")
+                {
+                    UseShellExecute = false,
+                    RedirectStandardOutput = true,
+                    RedirectStandardError = true,
+                    CreateNoWindow = true
+                };//第二个参数为传入的参数，string类型以空格分隔各个参数  
+                p.StartInfo = pi;
+                p.Start();
+                output = p.StandardOutput.ReadToEnd();
+                error = p.StandardError.ReadToEnd();
+                if (error != null && error.Length > 0)
+                {
+                    Output(error);
+                    return false;
+                }
+                foreach (Match tempM in Regex.Matches(output, match))
+                {
+                    Output00.Text = tempM.Value.Remove(0, 2);
+                    Ischange = tempM.Value.Remove(0, 2).ToString().Equals(data.ToString());
+                    Update();
                     Output00.Update();
-                    Output("Register 00:" + tempM);
+                    Output("写入数据成功:" + tempM);
+                    Output(Ischange.ToString());
+                }
+                p.WaitForExit();//等待程序执行完退出进程
+                p.Close();
+                return Ischange;
+            }
+        }
+
+        public void checkdevice( out bool Isconnect)
+        {
+            string cmd, output, error;
+            cmd ="adb devices &exit";//说明：不管命令是否成功均执行exit命令，否则当调用ReadToEnd()方法时，会处于假死状态
+            string match = @"(.*?)\s+device";
+            using (Process p = new Process())
+            {
+                p.StartInfo.FileName = CmdPath;
+                p.StartInfo.UseShellExecute = false;        //是否使用操作系统shell启动
+                p.StartInfo.RedirectStandardInput = true;   //接受来自调用程序的输入信息
+                p.StartInfo.RedirectStandardOutput = true;  //由调用程序获取输出信息
+                p.StartInfo.RedirectStandardError = true;   //重定向标准错误输出
+                p.StartInfo.CreateNoWindow = true;          //不显示程序窗口
+                p.Start();//启动程序
+                //向cmd窗口写入命令
+                p.StandardInput.WriteLine(cmd);
+                p.StandardInput.AutoFlush = true;
+                //获取cmd窗口的输出信息
+                output = p.StandardOutput.ReadToEnd();
+                error = p.StandardError.ReadToEnd();
+                if (error != null && error.Length > 0)
+                {
+                    Output("请配置好adb 环境:" + error.ToString());
+                    Isconnect = false;
+                    
                 }
                 else
                 {
-                    Output00.Text = tempM.Value.Remove(0, 2);
-                    this.Update();
-                    Output00.Update();
-                    Output("Register 01 :" + tempM);
-                    if(lastData.Equals(tempM.ToString()))
+                    MatchCollection temp = Regex.Matches(output, match);
+                    if (temp.Count > 2)
                     {
-                        try
-                        {
-                            return Convert.ToInt32(tempM.ToString());
-                        }
-                        catch { return 0; }
-
+                        Output("Device is connecting!");
+                        Isconnect = true;
                     }
                     else
                     {
-                        Output("未能成功写入寄存器");
-                        return 0;
+                        Output("No device found, please check connect!");
+                        Isconnect = false;
                     }
                     
                 }
-                i++;
-               
-                
+                p.WaitForExit();//等待程序执行完退出进程
+                p.Close();
             }
-            Output("手机未连接好，请重试！");
-
-
-            return 0;
         }
-        public bool OandClosePort(int data)
-        {
-            string output,error;
-            string match = @"\r\n(\d+)";
-            Process p = new Process();
-            cmd = System.AppDomain.CurrentDomain.BaseDirectory;
-            string path = cmd + "cmd1.bat";
-            ProcessStartInfo pi = new ProcessStartInfo(path, data.ToString())
-            {
-                UseShellExecute = false,
-                RedirectStandardOutput = true,
-                RedirectStandardError = true,
-            CreateNoWindow = true
-            };//第二个参数为传入的参数，string类型以空格分隔各个参数  
-            p.StartInfo = pi;
-            p.Start();
-            //output = p.StandardOutput.ReadToEnd();
-            output = p.StandardOutput.ReadToEnd();
-            error= p.StandardError.ReadLine();
-            p.WaitForExit();
-            //p.Close();
-            if(error != null)
-            {
-                Output("手机未连接好，请重试！");
-                Output(error);
-                return false;
-            }
-            foreach (Match tempM in Regex.Matches(output, match))
-                try
-                {
-                    if (Convert.ToInt32(tempM.ToString()) == data)
-                    {
-                        Output("更新USB限流开关成功！");
-                        return true;
-                    }
-                    else
-                    {
-                        Output("更新USB限流开关失败！");
-                        return false;
-                    }
 
-                } catch
-                {
-                }
 
-            Output("更新USB限流开关失败！");
-            return false;
-        }
         public void Output(string log)
         {
             LOG.AppendText(log + "\r\n"); //DateTime.Now.ToString("HH:mm:ss") + "  " +
         }
         public void TextLimit(object sender, EventArgs e)
         {
-
             try
             {
                 GetVi();             
@@ -317,7 +436,6 @@ namespace InputCurrentCalibration
                 Result.BackColor = Color.OrangeRed;
             }
         }
-
 
         //科学计数转数字
         private Decimal ChangeDataToD(string strData)
