@@ -29,7 +29,7 @@ namespace InputCurrentCalibration
             {
                 Output("GPIB address unavailable!");
                 Result.Text = "FAIL";
-                Result.BackColor = Color.OrangeRed;
+                Result.BackColor = Color.Red;
             }
             
         }
@@ -40,7 +40,7 @@ namespace InputCurrentCalibration
             if(buttonStart.Text == "Start")
             { 
                 LOG.Clear();
-                Result.Text = "测试中";
+                Result.Text = "校准中";
                 Result.BackColor = Color.Orange;
                 Result.Update();
                 buttonStart.Text = "Stop";
@@ -58,7 +58,14 @@ namespace InputCurrentCalibration
                 runCa.Abort();
                 Config("limit.bat","",0);
             }
-            
+            c2000.Text = "Waiting";
+            c2000.BackColor = Color.Orange;
+            c1040.Text = "Waiting";
+            c1040.BackColor = Color.Orange;
+            c800.Text = "Waiting";
+            c800.BackColor = Color.Orange;
+            c500.Text = "Waiting";
+            c500.BackColor = Color.Orange;
             return;
         }
         public void Runcal()
@@ -75,7 +82,6 @@ namespace InputCurrentCalibration
             {
                 if (Config("limit.bat","",1))
                 {
-                    Thread.Sleep(5000);
                     CalibCurrent();
                     if (!Config("limit.bat", "",0))
                     {
@@ -83,9 +89,14 @@ namespace InputCurrentCalibration
                         Result.BackColor = Color.Orange;
                     }
                 }
-            } catch(Exception ex)
+            }
+            catch (ThreadAbortException)
             {
-                Output(ex.ToString());
+                Output("校准中止。");
+            }
+            catch(Exception er)
+            {
+                Output(er.Message);
             }
             //Visa32.viClose(Vi);
             buttonStart.Text = "Start";
@@ -111,15 +122,12 @@ namespace InputCurrentCalibration
                 Result.BackColor = Color.OrangeRed;
                 return false;
             }
-
             Visa32.viPrintf(Vi, "*IDN?\n");
             Visa32.viScanf(Vi, "%t", Feedback);
             Output(Feedback.ToString());
-
-            Result.Text = "校准中...";
+            Result.Text = "已连接电源";
             Result.BackColor = Color.PaleGreen;
             Result.Update();
-
             return true;
         }
 
@@ -127,38 +135,55 @@ namespace InputCurrentCalibration
         {
             int Data00 = 0;
             int Data01 = 0;
+            int step = 1;
             double resultcurrent;
             bool Is2000=false, Is1040=false, Is800=false, Is500=false;
-            double maxcurrent = steptest(0, 0);
-            if (steptest(Data00, Data01) == 0)
+            double maxcurrent;
+            
+            for(int tempI = 0; tempI < 10; tempI++)
             {
-                Result.Text = "FAIL";
-                Result.BackColor = Color.OrangeRed;
-                Output("寄存器操作失败。。。。。。");
-                return false;
-            }else if (maxcurrent<=1.95)
-            {
-                Result.Text = "FAIL";
-                Result.BackColor = Color.OrangeRed;
-                Output("最大电流异常，请检查电池电量！");
-                return false;
-
+                maxcurrent = steptest(0, 0);
+                if (maxcurrent == 0)
+                {
+                    Result.Text = "FAIL";
+                    Result.BackColor = Color.OrangeRed;
+                    Output("寄存器操作失败。。。。。。");
+                    return false;
+                }
+                else if(0<maxcurrent && maxcurrent < 0.5)
+                {
+                    Thread.Sleep(1000);
+                    continue;
+                }
+                else if (0.5<maxcurrent && maxcurrent <= 1.95)
+                {
+                    Result.Text = "FAIL";
+                    Result.BackColor = Color.OrangeRed;
+                    Output("最大电流异常，请检查电池电量！");
+                    return false;
+                }
+                else
+                {
+                    break;
+                }
             }
-            for(Data00=0;Data00<256;Data00++)
+            
+            for(Data00=6;Data00<256;Data00=Data00+2-step)
             {
-                for (Data01 = Data00; Data01 <= Data00 + 1; Data01++)
+                for (Data01 = Data00; Data01 <= Data00 + step; Data01++)
                 {
                     resultcurrent = steptest(Data00, Data01);
                     Current.Text = resultcurrent.ToString();
-
+                    Current.Update();
                     if(!Is2000 && resultcurrent<= 2)
                     {
-                        if(Config("USB.bat", "config_data_ac_resistor", Data00 * 256 + Data01))
+                        //Is2000 = Config("USB.bat", "config_data_ac_resistor", Data00 * 256 + Data01);
+                        Is2000= setdata(Data00, Data01, rege: "06 07 ");
+                        if (Is2000)
                         {
                             Output("WALL adapter 2A 校准成功！");
                             config_lable(c2000, true);
-                            Is2000 = true;
-                            Data00 = Data01 = Data00 + 12;
+                            Data00 = Data01=Data00+14;
                         }
                         else
                         {
@@ -171,12 +196,12 @@ namespace InputCurrentCalibration
                     }
                     if(!Is1040 && resultcurrent<=1.04)
                     {
-                        if (setdata(Data00,Data01,rege:"02 03 "))
+                        Is1040 = setdata(Data00, Data01, rege: "02 03 ");
+                        if (Is1040)
                         {
                             Output("WLC 1A  校准成功！");
                             config_lable(c1040, true);
-                            Is1040 = true;
-                            Data00 = Data01 = Data00 + 16;
+                            Data00 = Data01=Data00+15;
                         }
                         else
                         {
@@ -190,12 +215,14 @@ namespace InputCurrentCalibration
                     }
                     if (!Is800 && resultcurrent <= 0.8)
                     {
-                        if (Config("USB.bat", "config_data_wlc_5w_resistor", Data00 * 256 + Data01))
+                        //Is800 = Config("USB.bat", "config_data_wlc_5w_resistor", Data00 * 256 + Data01);
+                        Is800 = setdata(Data00, Data01, rege: "08 09 ");
+                        if (Is800)
                         {
                             Output(" WLC 6V, 800mA  校准成功！");
                             config_lable(c800, true);
-                            Is800 = true;
-                            Data00 = Data01=Data00+130;
+                            Data00 = Data01=Data00+140;
+                            step = 0;
                         }
                         else
                         {
@@ -209,12 +236,13 @@ namespace InputCurrentCalibration
                     }
                     if (!Is500 && resultcurrent <= 0.5)
                     {
-                        if (Config("USB.bat", "config_data_usb_resistor", Data00 * 256 + Data01))
+                        //Is500 = Config("USB.bat", "config_data_usb_resistor", Data00 * 256 + Data01);
+                        Is500 = setdata(Data00, Data01, rege: "0A 0B ");
+                        if (Is500)
                         {
                             Output("USB PC 500mA  校准成功！");
                             config_lable(c500, true);
                             config_lable(Result, true);
-                            Is500 = true;
                             return true;
                         }
                         else
@@ -242,11 +270,9 @@ namespace InputCurrentCalibration
             else
             {
                 lable.Text = "Fail";
-                lable.BackColor = Color.OrangeRed;
+                lable.BackColor = Color.Red;
                 Update();
             }
-
-
         }
 
         public double steptest(int Data00,int Data01)
@@ -301,7 +327,7 @@ namespace InputCurrentCalibration
                     {
                         Output00.Text = tempM.Value.Remove(0, 2);
                         Ischange = tempM.Value.Remove(0, 2).ToString().Equals(Data00.ToString());
-                        Output(output.ToString());
+                        //Output(output.ToString());
                         Update();
                         Output("Register 00:" + tempM);
                     }
@@ -364,7 +390,6 @@ namespace InputCurrentCalibration
                     Update();
                     Output00.Update();
                     Output("写入数据成功:" + tempM);
-                    Output(Ischange.ToString());
                 }
                 p.WaitForExit();//等待程序执行完退出进程
                 p.Close();
@@ -422,6 +447,7 @@ namespace InputCurrentCalibration
         public void Output(string log)
         {
             LOG.AppendText(log + "\r\n"); //DateTime.Now.ToString("HH:mm:ss") + "  " +
+            LOG.Update();
         }
         public void TextLimit(object sender, EventArgs e)
         {
@@ -433,7 +459,7 @@ namespace InputCurrentCalibration
             {
                 Output("GPIB address unavailable!");
                 Result.Text = "FAIL";
-                Result.BackColor = Color.OrangeRed;
+                Result.BackColor = Color.Red;
             }
         }
 
