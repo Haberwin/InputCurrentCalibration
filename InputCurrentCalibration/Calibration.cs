@@ -1,20 +1,19 @@
 ﻿using System;
 using System.Diagnostics;
 using System.Drawing;
-using System.IO.Ports;
 using System.Runtime.InteropServices;
 using System.Text;
 using System.Text.RegularExpressions;
 using System.Threading;
-using System.Timers;
 using System.Windows.Forms;
 
 namespace InputCurrentCalibration
 {
     public partial class Calibration : Form
     {
-        public int Vi, ErrorStatus;
+        public int Vi, ErrorStatus=-1;
         public StringBuilder Feedback = new StringBuilder("", 3000);
+        public StringBuilder instr = new StringBuilder("INSTR");
         public string[] s;
         public double InputCurrent;
         private string cmd;
@@ -25,12 +24,10 @@ namespace InputCurrentCalibration
         {
             InitializeComponent();
             Control.CheckForIllegalCrossThreadCalls = false;
-            try { GetVi(); } catch
-            {
-                Output("GPIB address unavailable!");
-                Result.Text = "FAIL";
-                Result.BackColor = Color.Red;
-            }
+            Output("GPIB address unavailable!");
+            Result.Text = "FAIL";
+            Result.BackColor = Color.Red;
+            
             
         }
 
@@ -56,6 +53,7 @@ namespace InputCurrentCalibration
                 buttonStart.Text = "Start";
                 buttonStart.Update();
                 runCa.Abort();
+                runCa.Join();
                 Config("limit.bat","",0);
             }
             c2000.Text = "Waiting";
@@ -73,59 +71,93 @@ namespace InputCurrentCalibration
             Output("Start...");
             if (!GetVi())
             {
+                buttonStart.Text = "Start";
+                buttonStart.Update();
                 return;
             }
-            checkdevice(out bool Isconnect);
+            Thread.Sleep(1000);
+            Checkdevice(out bool Isconnect);
             if(!Isconnect)
-            { return; }
+            {
+                buttonStart.Text = "Start";
+                buttonStart.Update();
+                return; }
             try
             {
                 if (Config("limit.bat","",1))
                 {
-                    CalibCurrent();
+                    bool IsSuccess=CalibCurrent();
                     if (!Config("limit.bat", "",0))
                     {
                         Result.Text = "Fail";
                         Result.BackColor = Color.Orange;
                     }
+                    else
+                    {
+                        if (IsSuccess)
+                        {
+                            Config_lable(Result, true);
+                        }
+                        else
+                        {
+                            Config_lable(Result, false);
+                        }
+                        
+                    }
                 }
             }
             catch (ThreadAbortException)
             {
+                Setdata(0, 0, rege: "0A 0B ");
                 Output("校准中止。");
             }
             catch(Exception er)
             {
+
                 Output(er.Message);
+                Config("limit.bat", "", 0);
             }
             //Visa32.viClose(Vi);
             buttonStart.Text = "Start";
+            //Visa32.viClose(Vi);
             buttonStart.Update();
         }
 
-        public void closeVi(object sender,EventArgs e)
+        public void CloseVi(object sender,EventArgs e)
         {
-            Visa32.viClose(Vi);
+            //Visa32.viClose(Vi);
         }
 
         public bool GetVi()
         {
             //CalibrationCurrent.Properties.Resources.cmd2
-            ErrorStatus = -1;
+            //ErrorStatus = -1;
+            short t1 = 1, t2 = 0;
             GPIB_Address = GPIB.Text;
-            Visa32.viOpenDefaultRM(out int defrm);
-            ErrorStatus = Visa32.viOpen(defrm, "GPIB0::" + GPIB_Address + "::INSTR", 0, 1000, out Vi);
-            if (ErrorStatus != 0)
+            Visa32.viGetDefaultRM(out int defrm);
+            Thread.Sleep(200);
+            if(ErrorStatus != 0)
             {
-                Output("GPIB address unavailable!");
-                Result.Text = "FAIL";
-                Result.BackColor = Color.OrangeRed;
-                return false;
+                Visa32.viParseRsrcEx(defrm, "GPIB0::" + GPIB_Address + "::0::INSTR", ref t1, ref t2, instr, null, null);
+                ErrorStatus = Visa32.viOpen(defrm, "GPIB0::" + GPIB_Address + "::0::INSTR", 1, 3000, out Vi);
+                if (ErrorStatus != 0)
+                {
+                    Output(ErrorStatus.ToString());
+                    Output("GPIB address unavailable!");
+
+                    Result.Text = "FAIL";
+                    Result.BackColor = Color.OrangeRed;
+                    return false;
+                }
             }
-            Visa32.viPrintf(Vi, "*IDN?\n");
+            
+            
+            Feedback.Remove(0, Feedback.Length);
+            Visa32.viPrintf(Vi, "*IDN?"+ System.Environment.NewLine);
+            Thread.Sleep(500);
             Visa32.viScanf(Vi, "%t", Feedback);
             Output(Feedback.ToString());
-            Result.Text = "已连接电源";
+            Result.Text = "Connecting";
             Result.BackColor = Color.PaleGreen;
             Result.Update();
             return true;
@@ -135,14 +167,33 @@ namespace InputCurrentCalibration
         {
             int Data00 = 0;
             int Data01 = 0;
-            int step = 1;
+            int step00 = 1;
+            int step01 = 1;
             double resultcurrent;
-            bool Is2000=false, Is1040=false, Is800=false, Is500=false;
+            bool Is2000=false, Is1040=false, Is800=false, Is500=false,Isversion=false;
             double maxcurrent;
-            
-            for(int tempI = 0; tempI < 10; tempI++)
+            Isversion = Setdata(35, 35, rege: "12 12 ");
+            if (Isversion)
             {
-                maxcurrent = steptest(0, 0);
+                Output("成功写入版本号35！");
+            }
+            else
+            {
+                Output("未能写入版本号！");
+                Setdata(255, 255, rege: "06 07 ");
+                Setdata(255, 255, rege: "10 11 ");
+                Setdata(255, 255, rege: "08 09 ");
+                Setdata(255, 255, rege: "02 03 ");
+                Result.Text = "FAIL";
+                Result.BackColor = Color.OrangeRed;
+                return false;
+            }
+
+            for (int tempI = 0; tempI < 12; tempI++)
+            {
+                maxcurrent = Steptest(0, 0);
+                Current.Text = maxcurrent.ToString();
+                Current.Update();
                 if (maxcurrent == 0)
                 {
                     Result.Text = "FAIL";
@@ -150,64 +201,98 @@ namespace InputCurrentCalibration
                     Output("寄存器操作失败。。。。。。");
                     return false;
                 }
-                else if(0<maxcurrent && maxcurrent < 0.5)
+                else if (0 < maxcurrent && maxcurrent <= 0.8)
                 {
+                    if (tempI == 11)
+                    {
+                        Output("电池电量太满，无法校准");
+                        return false;
+                    }
                     Thread.Sleep(1000);
                     continue;
                 }
-                else if (0.5<maxcurrent && maxcurrent <= 1.95)
+                else if (0.8 < maxcurrent && maxcurrent <= 1.90)
                 {
-                    Result.Text = "FAIL";
-                    Result.BackColor = Color.OrangeRed;
-                    Output("最大电流异常，请检查电池电量！");
-                    return false;
+                    if (tempI == 11)
+                    {
+                        Result.Text = "FAIL";
+                        Result.BackColor = Color.OrangeRed;
+                        Output("最大电流异常，请检查电池电量！");
+                        return false;
+                    }
+                    Thread.Sleep(1000);
+                    continue;
                 }
-                else
-                {
+                else{
                     break;
                 }
             }
             
-            for(Data00=6;Data00<256;Data00=Data00+2-step)
+            
+            for(Data00=3;Data00<255;Data00=Data00+step00)
             {
-                for (Data01 = Data00; Data01 <= Data00 + step; Data01++)
+                for (Data01 = Data00; Data01 <= Data00 + step01; Data01++)
                 {
-                    resultcurrent = steptest(Data00, Data01);
+                    if (Data00 == 128)
+                    {
+                        break;
+                    }
+                    resultcurrent = Steptest(Data00, Data01);
                     Current.Text = resultcurrent.ToString();
                     Current.Update();
                     if(!Is2000 && resultcurrent<= 2)
                     {
+
+                        if (resultcurrent < 1.92)
+                        {
+                            Data00 = Data00 - 2;
+                            break;
+                        }
                         //Is2000 = Config("USB.bat", "config_data_ac_resistor", Data00 * 256 + Data01);
-                        Is2000= setdata(Data00, Data01, rege: "06 07 ");
+                        Is2000 = Setdata(Data00, Data01, rege: "06 07 ");
                         if (Is2000)
                         {
                             Output("WALL adapter 2A 校准成功！");
-                            config_lable(c2000, true);
-                            Data00 = Data01=Data00+14;
+                            Config_lable(c2000, true);
+                            Data00 = Data01=Data00+15;
                         }
                         else
                         {
                             Output("WALL adapter 2A 校准失败！");
-                            config_lable(c2000, false);
-                            config_lable(Result, false);
+                            Setdata(255, 255, rege: "06 07 ");
+                            Setdata(255, 255, rege: "10 11 ");
+                            Setdata(255, 255, rege: "08 09 ");
+                            Setdata(255, 255, rege: "02 03 ");
+                            Config_lable(c2000, false);
+                            Config_lable(Result, false);
                             Update();
                             return false;
                         }
                     }
                     if(!Is1040 && resultcurrent<=1.04)
                     {
-                        Is1040 = setdata(Data00, Data01, rege: "02 03 ");
+                        if (resultcurrent < 1.01)
+                        {
+                            Data00 = Data00 - 2;
+                            break;
+                        }
+                        Is1040 = Setdata(Data00, Data01, rege: "10 11 ");
                         if (Is1040)
                         {
                             Output("WLC 1A  校准成功！");
-                            config_lable(c1040, true);
-                            Data00 = Data01=Data00+15;
+                            Config_lable(c1040, true);
+                            Data00 = Data01=Data00+7;
+                            step01 = 0;
                         }
                         else
                         {
                             Output("WLC 1A 校准失败！");
-                            config_lable(c1040, false);
-                            config_lable(Result, false);
+                            //Setdata(255, 255, rege: "06 07 ");
+                            Setdata(255, 255, rege: "10 11 ");
+                            Setdata(255, 255, rege: "08 09 ");
+                            Setdata(255, 255, rege: "02 03 ");
+                            Config_lable(c1040, false);
+                            Config_lable(Result, false);
                             Update();
                             return false;
                         }
@@ -215,51 +300,98 @@ namespace InputCurrentCalibration
                     }
                     if (!Is800 && resultcurrent <= 0.8)
                     {
+                        if (resultcurrent < 0.78)
+                        {
+                            Data00=Data01= Data00 - 2;
+                            break;
+                        }
                         //Is800 = Config("USB.bat", "config_data_wlc_5w_resistor", Data00 * 256 + Data01);
-                        Is800 = setdata(Data00, Data01, rege: "08 09 ");
+                        Is800 = Setdata(Data00, Data01, rege: "08 09 ");
                         if (Is800)
                         {
                             Output(" WLC 6V, 800mA  校准成功！");
-                            config_lable(c800, true);
-                            Data00 = Data01=Data00+140;
-                            step = 0;
+                            Config_lable(c800, true);
+                            Data00 = Data01=Data00+67;
+                            step00 = 1;
                         }
                         else
                         {
-                            Output(" WLC 6V, 800mA 校准失败！");
-                            config_lable(c800, false);
-                            config_lable(Result, false);
+                            Output("WLC 6V, 800mA 校准失败！");
+                            //Setdata(255, 255, rege: "06 07 ");
+                            //Setdata(255, 255, rege: "10 11 ");
+                            Setdata(255, 255, rege: "08 09 ");
+                            Setdata(255, 255, rege: "02 03 ");
+                            Config_lable(c800, false);
+                            Config_lable(Result, false);
                             Update();
                             return false;
                         }
-
                     }
+                    
                     if (!Is500 && resultcurrent <= 0.5)
                     {
+                        if (resultcurrent < 0.49)
+                        {
+                            Data00 = Data01 = Data00 - 2;
+                            break;
+                        }
+                        
                         //Is500 = Config("USB.bat", "config_data_usb_resistor", Data00 * 256 + Data01);
-                        Is500 = setdata(Data00, Data01, rege: "0A 0B ");
+                        Is500 = Setdata(Data00, Data01, rege: "02 03 ");
                         if (Is500)
                         {
                             Output("USB PC 500mA  校准成功！");
-                            config_lable(c500, true);
-                            config_lable(Result, true);
+                            Config_lable(c500, true);
                             return true;
+                            
                         }
                         else
                         {
                             Output("USB PC 500mA 校准失败！");
-                            config_lable(c500, false);
-                            config_lable(Result, false);
+                            //Setdata(255, 255, rege: "06 07 ");
+                            //Setdata(255, 255, rege: "10 11 ");
+                            //Setdata(255, 255, rege: "08 09 ");
+                            Setdata(255, 255, rege: "02 03 ");
+                            Config_lable(c500, false);
+                            Config_lable(Result, false);
                             Update();
                             return false;
                         }
-
                     }
+
                 }
             }
+            
+            if (!Is2000)
+            {
+                Setdata(255, 255, rege: "06 07 ");
+                Output("WALL adapter 2A 校准失败！");
+                Config_lable(c2000, false);
+            }
+            if (!Is1040)
+            {
+                Setdata(255, 255, rege: "10 11 ");
+                Output("WLC 1A 校准失败！");
+                Config_lable(c1040, false);
+            }
+            if(!Is800)
+            {
+                Setdata(255, 255, rege: "08 09 ");
+                Output("WLC 6V, 800mA 校准失败!");
+                Config_lable(c800, false);
+            }
+            if (!Is500)
+            {
+                Setdata(255, 255, rege: "02 03 ");
+                Output("USB PC 500mA 校准失败！");
+                Config_lable(c500, false);
+            }
+
+            Config_lable(Result, false);
+            Update();
             return false;
         }
-        public void config_lable(Label lable,bool result)
+        public void Config_lable(Label lable,bool result)
         {
             if (result)
             {
@@ -275,9 +407,9 @@ namespace InputCurrentCalibration
             }
         }
 
-        public double steptest(int Data00,int Data01)
+        public double Steptest(int Data00,int Data01)
         {
-            if (!setdata(Data00,Data01))
+            if (!Setdata(Data00,Data01))
             {
                 Result.Text = "FAIL";
                 Result.BackColor = Color.OrangeRed;
@@ -286,7 +418,7 @@ namespace InputCurrentCalibration
             }
             Output00.Update();
             Feedback.Remove(0, Feedback.Length);
-            Visa32.viPrintf(Vi, "MEAS:CURR:DC?; *WAI\n");
+            Visa32.viPrintf(Vi, "MEAS:CURR?"+ System.Environment.NewLine);
             Thread.Sleep(500);
             Visa32.viScanf(Vi, "%t", Feedback);
             s = Feedback.ToString().Split(',');
@@ -294,7 +426,7 @@ namespace InputCurrentCalibration
             return InputCurrent;
         }
         
-        public bool setdata(int Data00,int Data01,string rege="00 01 ")
+        public bool Setdata(int Data00,int Data01,string rege="00 01 ")
         {
             string output, error;
             string command=rege+Data00.ToString()+" "+Data01.ToString();
@@ -329,14 +461,14 @@ namespace InputCurrentCalibration
                         Ischange = tempM.Value.Remove(0, 2).ToString().Equals(Data00.ToString());
                         //Output(output.ToString());
                         Update();
-                        Output("Register 00:" + tempM);
+                        Output("Register"+rege.Split(' ')[0] +": "+ tempM);
                     }
                     else
                     {
                         Output00.Text = tempM.Value.Remove(0, 2);
                         this.Update();
                         Output00.Update();
-                        Output("Register 01 :" + tempM);
+                        Output("Register"+rege.Split(' ')[1]+": "+ tempM);
                         Ischange = tempM.Value.Remove(0, 2).ToString().Equals(Data01.ToString());
 
                         if (Ischange)
@@ -361,7 +493,6 @@ namespace InputCurrentCalibration
         {
             string output,error;
             bool Ischange = false;
-            int i = 0;
             string match = @"\r\n(\d+)";
             cmd = System.AppDomain.CurrentDomain.BaseDirectory;
             string path = cmd + cmdname;
@@ -397,7 +528,7 @@ namespace InputCurrentCalibration
             }
         }
 
-        public void checkdevice( out bool Isconnect)
+        public void Checkdevice( out bool Isconnect)
         {
             string cmd, output, error;
             cmd ="adb devices &exit";//说明：不管命令是否成功均执行exit命令，否则当调用ReadToEnd()方法时，会处于假死状态
@@ -436,32 +567,23 @@ namespace InputCurrentCalibration
                         Output("No device found, please check connect!");
                         Isconnect = false;
                     }
-                    
+                   
                 }
                 p.WaitForExit();//等待程序执行完退出进程
                 p.Close();
             }
         }
-
-
         public void Output(string log)
         {
-            LOG.AppendText(log + "\r\n"); //DateTime.Now.ToString("HH:mm:ss") + "  " +
+            LOG.AppendText(log + "\n"); //DateTime.Now.ToString("HH:mm:ss") + "  " +
             LOG.Update();
         }
-        public void TextLimit(object sender, EventArgs e)
+
+        private void GPIB_TextChanged(object sender, EventArgs e)
         {
-            try
-            {
-                GetVi();             
-            }
-            catch
-            {
-                Output("GPIB address unavailable!");
-                Result.Text = "FAIL";
-                Result.BackColor = Color.Red;
-            }
+            ErrorStatus = -1;
         }
+
 
         //科学计数转数字
         private Decimal ChangeDataToD(string strData)
@@ -485,17 +607,19 @@ namespace InputCurrentCalibration
         public const int VI_SPEC_VERSION = 4194304;
 #pragma warning disable IDE1006 // 命名样式
         #region - Resource Template Functions and Operations ----------------------------
-        [DllImportAttribute("VISA32.DLL", EntryPoint = "#141", ExactSpelling = true, CharSet = CharSet.Ansi, SetLastError = true)]
+        [DllImportAttribute("Visa32.dll", EntryPoint = "#141", ExactSpelling = true, CharSet = CharSet.Ansi, SetLastError = true)]
         public static extern int viOpenDefaultRM(out int sesn);
-        [DllImportAttribute("VISA32.DLL", EntryPoint = "#128", ExactSpelling = true, CharSet = CharSet.Ansi, SetLastError = true)]
+        [DllImportAttribute("Visa32.dll", EntryPoint = "#128", ExactSpelling = true, CharSet = CharSet.Ansi, SetLastError = true)]
         public static extern int viGetDefaultRM(out int sesn);
-        [DllImportAttribute("VISA32.DLL", EntryPoint = "#131", ExactSpelling = true, CharSet = CharSet.Ansi, SetLastError = true)]
+        [DllImportAttribute("Visa32.dll", EntryPoint = "#131", ExactSpelling = true, CharSet = CharSet.Ansi, SetLastError = true)]
         public static extern int viOpen(int sesn, string viDesc, int mode, int timeout, out int vi);
-        [DllImportAttribute("VISA32.DLL", EntryPoint = "#132", ExactSpelling = true, CharSet = CharSet.Ansi, SetLastError = true)]
+        [DllImportAttribute("Visa32.dll", EntryPoint = "#132", ExactSpelling = true, CharSet = CharSet.Ansi, SetLastError = true)]
         public static extern int viClose(int vi);
-        [DllImportAttribute("VISA32.DLL", EntryPoint = "#269", ExactSpelling = true, CharSet = CharSet.Ansi, SetLastError = true, CallingConvention = CallingConvention.Cdecl)]
+        [DllImportAttribute("Visa32.DLL", EntryPoint = "#146", ExactSpelling = true, CharSet = CharSet.Ansi, SetLastError = true)]
+        public static extern int viParseRsrcEx(int sesn, string desc, ref short intfType, ref short intfNum, StringBuilder rsrcClass, StringBuilder expandedUnaliasedName, StringBuilder aliasIfExists);
+        [DllImportAttribute("Visa32.dll", EntryPoint = "#269", ExactSpelling = true, CharSet = CharSet.Ansi, SetLastError = true, CallingConvention = CallingConvention.Cdecl)]
         public static extern int viPrintf(int vi, string writeFmt);
-        [DllImportAttribute("VISA32.DLL", EntryPoint = "#271", ExactSpelling = true, CharSet = CharSet.Ansi, SetLastError = true, CallingConvention = CallingConvention.Cdecl)]
+        [DllImportAttribute("Visa32.dll", EntryPoint = "#271", ExactSpelling = true, CharSet = CharSet.Ansi, SetLastError = true, CallingConvention = CallingConvention.Cdecl)]
         public static extern int viScanf(int vi, string readFmt, StringBuilder arg);
         #endregion
 #pragma warning restore IDE1006 // 命名样式
