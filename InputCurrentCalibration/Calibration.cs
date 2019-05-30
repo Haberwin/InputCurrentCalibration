@@ -605,10 +605,10 @@ namespace InputCurrentCalibration
 
         public void Checkdevice(out string Sn)
         {
-            string cmd, output;
-            cmd ="adb devices &exit";//说明：不管命令是否成功均执行exit命令，否则当调用ReadToEnd()方法时，会处于假死状态
+            string cmd, output,error;
+            cmd ="adb shell getprop gsm.facsn &exit";//说明：不管命令是否成功均执行exit命令，否则当调用ReadToEnd()方法时，会处于假死状态
             //string match = @"(.*?)\s+device";
-            string match = @"\s(\S+)\tdevice";
+            Regex match = new Regex(@"(\w{28})\r\n$");
             using (Process p = new Process())
             {
                 p.StartInfo.FileName = CmdPath;
@@ -623,23 +623,19 @@ namespace InputCurrentCalibration
                 p.StandardInput.AutoFlush = true;
                 //获取cmd窗口的输出信息
                 output = p.StandardOutput.ReadToEnd();
-                /*
                 error = p.StandardError.ReadToEnd();
                 
                 if (error != null && error.Length > 0)
                 {
-                    Output("请配置好adb 环境:" + error.ToString());
-                    Isconnect = false;
-                    
+                    Output(error.ToString());        
                 }
-                */
-                    MatchCollection temp = Regex.Matches(output, match);
-                    if (temp.Count > 0)
+                
+                    //MatchCollection temp = Regex.Matches(output, match);
+                MatchCollection temp = match.Matches(output);
+                   
+                    if (temp.Count>0)
                     {
-                    Sn = temp[0].Value.Replace("\n", "").Replace("\tdevice", "");
-                    
-                    
-                       
+                    Sn = temp[0].ToString(); 
                     }
                     else
                     {
