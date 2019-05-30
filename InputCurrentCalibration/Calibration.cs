@@ -14,18 +14,22 @@ namespace InputCurrentCalibration
         public int Vi, ErrorStatus=-1;
         public StringBuilder Feedback = new StringBuilder("", 3000);
         public StringBuilder instr = new StringBuilder("INSTR");
+        public delegate void SendLog(string str);
+        public delegate void ConfigObject(Control label, string text, Color color);
         public string[] s;
         public double InputCurrent;
         private string cmd;
         public string GPIB_Address;
         private static string CmdPath = @"C:\Windows\System32\cmd.exe";
+        Process AudioTest= new Process();
+        public bool End_Out=true;
         Thread runCa;
         public Calibration()
         {
             InitializeComponent();
-            Control.CheckForIllegalCrossThreadCalls = false;
+            //Control.CheckForIllegalCrossThreadCalls = false;
             Output("GPIB address unavailable!");
-            Result.Text = "FAIL";
+            Result.Text = "未开始";
             Result.BackColor = Color.Red;
             
             
@@ -34,93 +38,151 @@ namespace InputCurrentCalibration
         private void ButtonStart_Click(object sender, EventArgs e)
         {
 
-            if(buttonStart.Text == "Start")
+            if(buttonStart.Text == "开始")
             { 
                 LOG.Clear();
-                Result.Text = "校准中";
+                Result.Text = "等待中";
                 Result.BackColor = Color.Orange;
                 Result.Update();
-                buttonStart.Text = "Stop";
+                buttonStart.Text = "结束";
                 buttonStart.Update();
                 runCa = new Thread(Runcal);
                 runCa.Start();
             }
-            else if(buttonStart.Text == "Stop")
+            else if(buttonStart.Text == "结束")
             {
                 Result.Text = "停止";
                 Result.BackColor = Color.Orange;
                 Result.Update();
-                buttonStart.Text = "Start";
+                buttonStart.Text = "开始";
                 buttonStart.Update();
                 runCa.Abort();
                 runCa.Join();
-                Config("limit.bat","",0);
+                
             }
-            c2000.Text = "Waiting";
+            c2000.Text = "待校准";
             c2000.BackColor = Color.Orange;
-            c1040.Text = "Waiting";
+            c1040.Text = "待校准";
             c1040.BackColor = Color.Orange;
-            c800.Text = "Waiting";
+            c800.Text = "待校准";
             c800.BackColor = Color.Orange;
-            c500.Text = "Waiting";
+            c500.Text = "待校准";
             c500.BackColor = Color.Orange;
             return;
         }
         public void Runcal()
         {
+            string sn_no = "";
             Output("Start...");
+            
             if (!GetVi())
             {
-                buttonStart.Text = "Start";
-                buttonStart.Update();
+                Config_Lable(buttonStart, "开始",Color.White);
+                //buttonStart.Text = "Start";
+                //buttonStart.Update();
                 return;
             }
             Thread.Sleep(1000);
-            Checkdevice(out bool Isconnect);
-            if(!Isconnect)
+            
+            while (true)
             {
-                buttonStart.Text = "Start";
-                buttonStart.Update();
-                return; }
-            try
-            {
-                if (Config("limit.bat","",1))
+               
+                Checkdevice(out string Sn);
+                if (Sn.Equals("") || Sn.Equals(sn_no))
                 {
-                    bool IsSuccess=CalibCurrent();
-                    if (!Config("limit.bat", "",0))
+                    if (Sn.Equals(""))
                     {
-                        Result.Text = "Fail";
-                        Result.BackColor = Color.Orange;
+                        Config_Lable(Result, "等待中", Color.Orange);
+                       
+
                     }
-                    else
+
+                    //buttonStart.Text = "Start";
+                    //buttonStart.Update();
+                    Output("Wait For new device ....");
+                    Thread.Sleep(3000);
+                    
+                    continue;
+                }
+                else
+                {
+                    Config_Lable(Result, "校准中",Color.Orange);
+                    Config_Lable(c2000, "待校准", Color.Orange);
+                    Config_Lable(c1040, "待校准", Color.Orange);
+                    Config_Lable(c800, "待校准", Color.Orange);
+                    Config_Lable(c500, "待校准", Color.Orange);
+                    /*
+                    Result.Text = "校准中";
+                    Result.BackColor = Color.Orange;
+                    c2000.Text = "Waiting";
+                    c2000.BackColor = Color.Orange;
+                    c1040.Text = "Waiting";
+                    c1040.BackColor = Color.Orange;
+                    c800.Text = "Waiting";
+                    c800.BackColor = Color.Orange;
+                    c500.Text = "Waiting";
+                    c500.BackColor = Color.Orange;
+                    */
+                    sn_no = Sn;
+                    Output("Find device " + Sn );
+                }
+                try
+                {
+                    
+                    if (Config("limit.bat", "", 1))
                     {
-                        if (IsSuccess)
+                        
+                        bool IsSuccess = CalibCurrent();
+                        if (!Config("limit.bat", "", 0))
                         {
-                            Config_lable(Result, true);
+                            Config_Lable(Result, "失败", Color.Orange);
+                           // Result.Text = "Fail";
+                            //Result.BackColor = Color.Orange;
                         }
                         else
                         {
-                            Config_lable(Result, false);
+                            if (IsSuccess)
+                            {
+                                Config_lable(Result, true);
+                              
+                            }
+                            else
+                            {
+                                Config_lable(Result, false);
+                            }
+
                         }
                         
-                    }
+                       
                 }
-            }
-            catch (ThreadAbortException)
-            {
-                Setdata(0, 0, rege: "0A 0B ");
-                Output("校准中止。");
-            }
-            catch(Exception er)
-            {
+                 
+                }
+                catch (ThreadAbortException)
+                {
+                    Setdata(0, 0, rege: "0A 0B ");
+                    Output("校准中止。");
+                    Config("limit.bat", "", 0);
+                    break;
+                }
+                catch (Exception er)
+                {
 
-                Output(er.Message);
-                Config("limit.bat", "", 0);
+                    Output(er.Message);
+                    Config("limit.bat", "", 0);
+                    break;
+                }
+                
+
             }
+            Config_Lable(c2000, "待校准", Color.Orange);
+            Config_Lable(c1040, "待校准", Color.Orange);
+            Config_Lable(c800, "待校准", Color.Orange);
+            Config_Lable(c500, "待校准", Color.Orange);
+            Config_Lable(buttonStart, "开始", Color.White);
             //Visa32.viClose(Vi);
-            buttonStart.Text = "Start";
+           // buttonStart.Text = "Start";
             //Visa32.viClose(Vi);
-            buttonStart.Update();
+            //buttonStart.Update();
         }
 
         public void CloseVi(object sender,EventArgs e)
@@ -144,9 +206,9 @@ namespace InputCurrentCalibration
                 {
                     Output(ErrorStatus.ToString());
                     Output("GPIB address unavailable!");
-
-                    Result.Text = "FAIL";
-                    Result.BackColor = Color.OrangeRed;
+                    Config_Lable(Result, "失败", Color.Red);
+                    //Result.Text = "FAIL";
+                    //Result.BackColor = Color.OrangeRed;
                     return false;
                 }
             }
@@ -157,9 +219,10 @@ namespace InputCurrentCalibration
             Thread.Sleep(500);
             Visa32.viScanf(Vi, "%t", Feedback);
             Output(Feedback.ToString());
-            Result.Text = "Connecting";
-            Result.BackColor = Color.PaleGreen;
-            Result.Update();
+            Config_Lable(Result, "已连接", Color.PaleGreen);
+            //Result.Text = "Connecting";
+            //Result.BackColor = Color.PaleGreen;
+            //Result.Update();
             return true;
         }
 
@@ -184,20 +247,23 @@ namespace InputCurrentCalibration
                 Setdata(255, 255, rege: "10 11 ");
                 Setdata(255, 255, rege: "08 09 ");
                 Setdata(255, 255, rege: "02 03 ");
-                Result.Text = "FAIL";
-                Result.BackColor = Color.OrangeRed;
+                Config_Lable(Result, "失败", Color.Red);
+                //Result.Text = "FAIL";
+                //Result.BackColor = Color.OrangeRed;
                 return false;
             }
 
             for (int tempI = 0; tempI < 12; tempI++)
             {
                 maxcurrent = Steptest(0, 0);
-                Current.Text = maxcurrent.ToString();
-                Current.Update();
+                Config_Lable(Current, maxcurrent.ToString(), Color.White);
+                //Current.Text = maxcurrent.ToString();
+                //Current.Update();
                 if (maxcurrent == 0)
                 {
-                    Result.Text = "FAIL";
-                    Result.BackColor = Color.OrangeRed;
+                    Config_Lable(Result, "失败", Color.Red);
+                    //Result.Text = "FAIL";
+                    //Result.BackColor = Color.OrangeRed;
                     Output("寄存器操作失败。。。。。。");
                     return false;
                 }
@@ -215,8 +281,9 @@ namespace InputCurrentCalibration
                 {
                     if (tempI == 11)
                     {
-                        Result.Text = "FAIL";
-                        Result.BackColor = Color.OrangeRed;
+                        Config_Lable(Result, "失败", Color.Red);
+                        //Result.Text = "FAIL";
+                        //Result.BackColor = Color.OrangeRed;
                         Output("最大电流异常，请检查电池电量！");
                         return false;
                     }
@@ -238,8 +305,9 @@ namespace InputCurrentCalibration
                         break;
                     }
                     resultcurrent = Steptest(Data00, Data01);
-                    Current.Text = resultcurrent.ToString();
-                    Current.Update();
+                    Config_Lable(Current, resultcurrent.ToString(), Color.White);
+                    //Current.Text = resultcurrent.ToString();
+                    //Current.Update();
                     if(!Is2000 && resultcurrent<= 2)
                     {
 
@@ -395,15 +463,17 @@ namespace InputCurrentCalibration
         {
             if (result)
             {
-                lable.Text = "Pass";
-                lable.BackColor = Color.PaleGreen;
-                Update();
+                Config_Lable(lable,"通过", Color.PaleGreen);
+                //lable.Text = "Pass";
+                //lable.BackColor = Color.PaleGreen;
+                //Update();
             }
             else
             {
-                lable.Text = "Fail";
-                lable.BackColor = Color.Red;
-                Update();
+                Config_Lable(lable, "失败", Color.Red);
+                //lable.Text = "Fail";
+                //lable.BackColor = Color.Red;
+                //Update();
             }
         }
 
@@ -411,12 +481,13 @@ namespace InputCurrentCalibration
         {
             if (!Setdata(Data00,Data01))
             {
-                Result.Text = "FAIL";
-                Result.BackColor = Color.OrangeRed;
+                Config_Lable(Result, "失败", Color.Red);
+               // Result.Text = "FAIL";
+                //Result.BackColor = Color.OrangeRed;
                 Output("未能成功写入寄存器");
                 return 0;
             }
-            Output00.Update();
+            //Output00.Update();
             Feedback.Remove(0, Feedback.Length);
             Visa32.viPrintf(Vi, "MEAS:CURR?"+ System.Environment.NewLine);
             Thread.Sleep(500);
@@ -457,18 +528,20 @@ namespace InputCurrentCalibration
                 {
                     if (i == 0)
                     {
-                        Output00.Text = tempM.Value.Remove(0, 2);
+                        Config_Lable(Output00, tempM.Value.Remove(0, 2), Color.White);
+                        //Output00.Text = tempM.Value.Remove(0, 2);
                         Ischange = tempM.Value.Remove(0, 2).ToString().Equals(Data00.ToString());
                         //Output(output.ToString());
-                        Update();
-                        Output("Register"+rege.Split(' ')[0] +": "+ tempM);
+                        //Update();
+                        Output("Register"+rege.Split(' ')[0] +": "+ tempM.Value.Remove(0,2));
                     }
                     else
                     {
-                        Output00.Text = tempM.Value.Remove(0, 2);
-                        this.Update();
-                        Output00.Update();
-                        Output("Register"+rege.Split(' ')[1]+": "+ tempM);
+                        Config_Lable(Output00, tempM.Value.Remove(0, 2), Color.White);
+                        //Output00.Text = tempM.Value.Remove(0, 2);
+                        //this.Update();
+                        //Output00.Update();
+                        Output("Register"+rege.Split(' ')[1]+": "+ tempM.Value.Remove(0, 2));
                         Ischange = tempM.Value.Remove(0, 2).ToString().Equals(Data01.ToString());
 
                         if (Ischange)
@@ -516,10 +589,12 @@ namespace InputCurrentCalibration
                 }
                 foreach (Match tempM in Regex.Matches(output, match))
                 {
-                    Output00.Text = tempM.Value.Remove(0, 2);
+                    Config_Lable(Output00, tempM.Value.Remove(0, 2), Color.White);
+
+                    //Output00.Text = tempM.Value.Remove(0, 2);
                     Ischange = tempM.Value.Remove(0, 2).ToString().Equals(data.ToString());
-                    Update();
-                    Output00.Update();
+                    //Update();
+                    //Output00.Update();
                     Output("写入数据成功:" + tempM);
                 }
                 p.WaitForExit();//等待程序执行完退出进程
@@ -528,11 +603,12 @@ namespace InputCurrentCalibration
             }
         }
 
-        public void Checkdevice( out bool Isconnect)
+        public void Checkdevice(out string Sn)
         {
-            string cmd, output, error;
+            string cmd, output;
             cmd ="adb devices &exit";//说明：不管命令是否成功均执行exit命令，否则当调用ReadToEnd()方法时，会处于假死状态
-            string match = @"(.*?)\s+device";
+            //string match = @"(.*?)\s+device";
+            string match = @"\s(\S+)\tdevice";
             using (Process p = new Process())
             {
                 p.StartInfo.FileName = CmdPath;
@@ -547,41 +623,86 @@ namespace InputCurrentCalibration
                 p.StandardInput.AutoFlush = true;
                 //获取cmd窗口的输出信息
                 output = p.StandardOutput.ReadToEnd();
+                /*
                 error = p.StandardError.ReadToEnd();
+                
                 if (error != null && error.Length > 0)
                 {
                     Output("请配置好adb 环境:" + error.ToString());
                     Isconnect = false;
                     
                 }
-                else
-                {
+                */
                     MatchCollection temp = Regex.Matches(output, match);
-                    if (temp.Count > 2)
+                    if (temp.Count > 0)
                     {
-                        Output("Device is connecting!");
-                        Isconnect = true;
+                    Sn = temp[0].Value.Replace("\n", "").Replace("\tdevice", "");
+                    
+                    
+                       
                     }
                     else
                     {
                         Output("No device found, please check connect!");
-                        Isconnect = false;
+                    Sn = "";
                     }
                    
-                }
+            
                 p.WaitForExit();//等待程序执行完退出进程
                 p.Close();
             }
         }
         public void Output(string log)
         {
-            LOG.AppendText(log + "\n"); //DateTime.Now.ToString("HH:mm:ss") + "  " +
-            LOG.Update();
+            if (this.LOG.InvokeRequired)
+            {
+                SendLog printlog = new SendLog(Output);
+                this.LOG.Invoke(printlog, log);                                                                                                                                                                                                                                                                                                                     
+            }
+            else
+            {
+                this.LOG.AppendText(String.Format("{0}|{1}\r\n", DateTime.Now.ToString("hh:mm:ss"), log));
+            }
+
+
+
+
+           // LOG.AppendText(log + "\n"); //DateTime.Now.ToString("HH:mm:ss") + "  " +
+            //LOG.Update();
+        }
+
+        public void Config_Lable(Control lable,string text,Color color)
+        {
+            if (lable.InvokeRequired)
+            {
+                ConfigObject configObject = new ConfigObject(Config_Lable);
+                lable.Invoke(configObject,lable,text,color);
+            }
+            else
+            {
+                lable.Text = text;
+                lable.BackColor = color;
+            }
         }
 
         private void GPIB_TextChanged(object sender, EventArgs e)
         {
             ErrorStatus = -1;
+        }
+
+                                 
+
+        private void Calibration_FormClosing(object sender, FormClosingEventArgs e)
+        {
+            End_Out = false;
+            try
+            {
+                AudioTest.Kill();
+            }
+            catch
+            {
+
+            }
         }
 
 

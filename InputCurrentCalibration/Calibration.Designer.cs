@@ -53,12 +53,12 @@
             // 
             this.buttonStart.BackColor = System.Drawing.Color.MistyRose;
             this.buttonStart.Font = new System.Drawing.Font("Consolas", 36F, System.Drawing.FontStyle.Regular, System.Drawing.GraphicsUnit.Point, ((byte)(0)));
-            this.buttonStart.Location = new System.Drawing.Point(12, 4);
+            this.buttonStart.Location = new System.Drawing.Point(24, 23);
             this.buttonStart.Margin = new System.Windows.Forms.Padding(3, 4, 3, 4);
             this.buttonStart.Name = "buttonStart";
-            this.buttonStart.Size = new System.Drawing.Size(291, 319);
+            this.buttonStart.Size = new System.Drawing.Size(291, 306);
             this.buttonStart.TabIndex = 6;
-            this.buttonStart.Text = "Start";
+            this.buttonStart.Text = "开始";
             this.buttonStart.UseVisualStyleBackColor = false;
             this.buttonStart.Click += new System.EventHandler(this.ButtonStart_Click);
             // 
@@ -91,7 +91,7 @@
             this.GPIB.Location = new System.Drawing.Point(974, 23);
             this.GPIB.Margin = new System.Windows.Forms.Padding(3, 4, 3, 4);
             this.GPIB.Name = "GPIB";
-            this.GPIB.Size = new System.Drawing.Size(207, 41);
+            this.GPIB.Size = new System.Drawing.Size(207, 46);
             this.GPIB.TabIndex = 0;
             this.GPIB.Text = "5";
             this.GPIB.TextAlign = System.Windows.Forms.HorizontalAlignment.Right;
@@ -126,11 +126,11 @@
             this.Result.BackColor = System.Drawing.Color.PaleGreen;
             this.Result.BorderStyle = System.Windows.Forms.BorderStyle.Fixed3D;
             this.Result.Font = new System.Drawing.Font("Consolas", 48F, System.Drawing.FontStyle.Regular, System.Drawing.GraphicsUnit.Point, ((byte)(0)));
-            this.Result.Location = new System.Drawing.Point(325, 4);
+            this.Result.Location = new System.Drawing.Point(325, 23);
             this.Result.Name = "Result";
-            this.Result.Size = new System.Drawing.Size(318, 319);
+            this.Result.Size = new System.Drawing.Size(318, 306);
             this.Result.TabIndex = 18;
-            this.Result.Text = "PASS";
+            this.Result.Text = "未开始";
             this.Result.TextAlign = System.Drawing.ContentAlignment.MiddleCenter;
             // 
             // Current
@@ -159,9 +159,9 @@
             // 
             this.label4.BorderStyle = System.Windows.Forms.BorderStyle.FixedSingle;
             this.label4.Font = new System.Drawing.Font("Consolas", 25F, System.Drawing.FontStyle.Regular, System.Drawing.GraphicsUnit.Point, ((byte)(0)));
-            this.label4.Location = new System.Drawing.Point(15, 305);
+            this.label4.Location = new System.Drawing.Point(12, 324);
             this.label4.Name = "label4";
-            this.label4.Size = new System.Drawing.Size(200, 50);
+            this.label4.Size = new System.Drawing.Size(228, 50);
             this.label4.TabIndex = 29;
             this.label4.Text = "USB 500mA";
             this.label4.TextAlign = System.Drawing.ContentAlignment.MiddleLeft;
@@ -170,9 +170,9 @@
             // 
             this.label2.BorderStyle = System.Windows.Forms.BorderStyle.FixedSingle;
             this.label2.Font = new System.Drawing.Font("Consolas", 25F, System.Drawing.FontStyle.Regular, System.Drawing.GraphicsUnit.Point, ((byte)(0)));
-            this.label2.Location = new System.Drawing.Point(13, 222);
+            this.label2.Location = new System.Drawing.Point(12, 245);
             this.label2.Name = "label2";
-            this.label2.Size = new System.Drawing.Size(200, 50);
+            this.label2.Size = new System.Drawing.Size(228, 50);
             this.label2.TabIndex = 30;
             this.label2.Text = "WLC 800mA";
             this.label2.TextAlign = System.Drawing.ContentAlignment.MiddleLeft;
@@ -181,9 +181,9 @@
             // 
             this.label5.BorderStyle = System.Windows.Forms.BorderStyle.FixedSingle;
             this.label5.Font = new System.Drawing.Font("Consolas", 25F, System.Drawing.FontStyle.Regular, System.Drawing.GraphicsUnit.Point, ((byte)(0)));
-            this.label5.Location = new System.Drawing.Point(15, 143);
+            this.label5.Location = new System.Drawing.Point(12, 160);
             this.label5.Name = "label5";
-            this.label5.Size = new System.Drawing.Size(200, 50);
+            this.label5.Size = new System.Drawing.Size(228, 50);
             this.label5.TabIndex = 31;
             this.label5.Text = "WLC 1A";
             this.label5.TextAlign = System.Drawing.ContentAlignment.MiddleLeft;
@@ -192,9 +192,9 @@
             // 
             this.label7.BorderStyle = System.Windows.Forms.BorderStyle.FixedSingle;
             this.label7.Font = new System.Drawing.Font("Consolas", 25F, System.Drawing.FontStyle.Regular, System.Drawing.GraphicsUnit.Point, ((byte)(0)));
-            this.label7.Location = new System.Drawing.Point(15, 68);
+            this.label7.Location = new System.Drawing.Point(12, 76);
             this.label7.Name = "label7";
-            this.label7.Size = new System.Drawing.Size(200, 50);
+            this.label7.Size = new System.Drawing.Size(228, 50);
             this.label7.TabIndex = 32;
             this.label7.Text = "Adapter 2A";
             this.label7.TextAlign = System.Drawing.ContentAlignment.MiddleLeft;
@@ -222,51 +222,51 @@
             // 
             // c800
             // 
-            this.c800.BackColor = System.Drawing.Color.FromArgb(((int)(((byte)(255)))), ((int)(((byte)(192)))), ((int)(((byte)(128)))));
+            this.c800.BackColor = System.Drawing.Color.Orange;
             this.c800.BorderStyle = System.Windows.Forms.BorderStyle.FixedSingle;
-            this.c800.Location = new System.Drawing.Point(313, 222);
+            this.c800.Location = new System.Drawing.Point(385, 245);
             this.c800.Name = "c800";
-            this.c800.Size = new System.Drawing.Size(200, 50);
+            this.c800.Size = new System.Drawing.Size(221, 50);
             this.c800.TabIndex = 36;
             this.c800.Text = "Waiting";
-            this.c800.TextAlign = System.Drawing.ContentAlignment.MiddleLeft;
+            this.c800.TextAlign = System.Drawing.ContentAlignment.MiddleCenter;
             // 
             // c1040
             // 
-            this.c1040.BackColor = System.Drawing.Color.FromArgb(((int)(((byte)(255)))), ((int)(((byte)(192)))), ((int)(((byte)(128)))));
+            this.c1040.BackColor = System.Drawing.Color.Orange;
             this.c1040.BorderStyle = System.Windows.Forms.BorderStyle.FixedSingle;
-            this.c1040.Location = new System.Drawing.Point(313, 143);
+            this.c1040.Location = new System.Drawing.Point(385, 159);
             this.c1040.Name = "c1040";
-            this.c1040.Size = new System.Drawing.Size(200, 50);
+            this.c1040.Size = new System.Drawing.Size(221, 50);
             this.c1040.TabIndex = 35;
             this.c1040.Text = "Waiting";
-            this.c1040.TextAlign = System.Drawing.ContentAlignment.MiddleLeft;
+            this.c1040.TextAlign = System.Drawing.ContentAlignment.MiddleCenter;
             // 
             // c2000
             // 
-            this.c2000.BackColor = System.Drawing.Color.FromArgb(((int)(((byte)(255)))), ((int)(((byte)(192)))), ((int)(((byte)(128)))));
+            this.c2000.BackColor = System.Drawing.Color.Orange;
             this.c2000.BorderStyle = System.Windows.Forms.BorderStyle.FixedSingle;
-            this.c2000.Location = new System.Drawing.Point(313, 68);
+            this.c2000.Location = new System.Drawing.Point(385, 76);
             this.c2000.Name = "c2000";
-            this.c2000.Size = new System.Drawing.Size(200, 50);
+            this.c2000.Size = new System.Drawing.Size(221, 50);
             this.c2000.TabIndex = 34;
             this.c2000.Text = "Waiting";
-            this.c2000.TextAlign = System.Drawing.ContentAlignment.MiddleLeft;
+            this.c2000.TextAlign = System.Drawing.ContentAlignment.MiddleCenter;
             // 
             // c500
             // 
-            this.c500.BackColor = System.Drawing.Color.FromArgb(((int)(((byte)(255)))), ((int)(((byte)(192)))), ((int)(((byte)(128)))));
+            this.c500.BackColor = System.Drawing.Color.Orange;
             this.c500.BorderStyle = System.Windows.Forms.BorderStyle.FixedSingle;
-            this.c500.Location = new System.Drawing.Point(313, 305);
+            this.c500.Location = new System.Drawing.Point(385, 323);
             this.c500.Name = "c500";
-            this.c500.Size = new System.Drawing.Size(200, 50);
+            this.c500.Size = new System.Drawing.Size(221, 50);
             this.c500.TabIndex = 33;
             this.c500.Text = "Waiting";
-            this.c500.TextAlign = System.Drawing.ContentAlignment.MiddleLeft;
+            this.c500.TextAlign = System.Drawing.ContentAlignment.MiddleCenter;
             // 
             // Calibration
             // 
-            this.AutoScaleDimensions = new System.Drawing.SizeF(7F, 17F);
+            this.AutoScaleDimensions = new System.Drawing.SizeF(8F, 20F);
             this.AutoScaleMode = System.Windows.Forms.AutoScaleMode.Font;
             this.ClientSize = new System.Drawing.Size(1229, 828);
             this.Controls.Add(this.groupBox1);
@@ -283,6 +283,7 @@
             this.Margin = new System.Windows.Forms.Padding(3, 4, 3, 4);
             this.Name = "Calibration";
             this.Text = "Calibration";
+            this.FormClosing += new System.Windows.Forms.FormClosingEventHandler(this.Calibration_FormClosing);
             this.groupBox1.ResumeLayout(false);
             this.ResumeLayout(false);
             this.PerformLayout();
