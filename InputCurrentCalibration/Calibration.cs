@@ -608,7 +608,7 @@ namespace InputCurrentCalibration
             string cmd, output,error;
             cmd ="adb shell getprop gsm.facsn &exit";//说明：不管命令是否成功均执行exit命令，否则当调用ReadToEnd()方法时，会处于假死状态
             //string match = @"(.*?)\s+device";
-            Regex match = new Regex(@"(\w{28})\r\n$");
+            Regex match = new Regex(@"(\w{19|28})\r\n$");
             using (Process p = new Process())
             {
                 p.StartInfo.FileName = CmdPath;
@@ -640,6 +640,7 @@ namespace InputCurrentCalibration
                     else
                     {
                         Output("No device found, please check connect!");
+                        Output("请确认机器是否遗漏写入Barcode！！");
                     Sn = "";
                     }
                    
